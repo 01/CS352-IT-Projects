@@ -7,5 +7,5 @@
 # private keys are used to decrypt incomming packets and public keys are
 # used to encrypt outbound packets
 private    *      *   53fbcbb3b76e173f8241408b1f3dd8f9bf0d2a9f84d3db8fee2f38d0f2429729
-public localhost 5555 78c7227cf5c637fbc2066070b6fa2662b5c94bbac6fcb1ba5d77ecd61f718574
+public pascal.cs.rutgers.edu 5555 78c7227cf5c637fbc2066070b6fa2662b5c94bbac6fcb1ba5d77ecd61f718574
 public localhost 5555 78c7227cf5c637fbc2066070b6fa2662b5c94bbac6fcb1ba5d77ecd61f718574

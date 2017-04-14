@@ -27,9 +27,11 @@ import math
 sock352_timeout = 0.2
 sock352PktSize = 5000
 
+
 # Packet structure definition
 sock352PktHdrData = '!BBBBHHLLQQLL'  #
 udpPkt_hdr_data = struct.Struct(sock352PktHdrData)
+
 
 header_len = struct.calcsize(sock352PktHdrData)
 
@@ -48,9 +50,6 @@ from inspect import currentframe, getframeinfo
 # define the UDP ports all messages are sent
 # and received from
 
-# the ports to use for the sock352 messages 
-global sock352portTx
-global sock352portRx
 # the public and private keychains in hex format 
 global publicKeysHex
 global privateKeysHex
@@ -66,6 +65,7 @@ publicKeysHex = {}
 privateKeysHex = {} 
 publicKeys = {} 
 privateKeys = {}
+connections = {}
 
 # this is 0xEC 
 ENCRYPT = 236 
@@ -82,24 +82,23 @@ def init(UDPportTx,UDPportRx):
 
     # create the sockets to send and receive UDP packets on 
     # if the ports are not equal, create two sockets, one for Tx and one for Rx
-    print ("Inside Global Init...........")
+    print (".....................Inside Global Init...........")
     global udpGlobalSocket
     udpGlobalSocket = syssock.socket(syssock.AF_INET, syssock.SOCK_DGRAM)
     udpGlobalSocket.setsockopt(syssock.SOL_SOCKET, syssock.SO_REUSEADDR, 1)
-
 
     if udpGlobalSocket is None:
         print "This Failed to Create Socket"
     else:
         print "Successful Creation of Global Socket"
 
-    if UDPportTx < 1 or UDPportTx > 65535:
+    if int(UDPportTx) < 1 or int(UDPportTx) > 65535:
         send_port = 27182
 
-    if UDPportRx < 1 or UDPportRx > 65535:
+    if int(UDPportRx) < 1 or int(UDPportRx) > 65535:
         recv_port = 27182
 
-    #udpGlobalSocket.allow_reuse_address=True
+    print "Bind to RecvPort: ", recv_port
     udpGlobalSocket.bind(('', recv_port))
     
 
@@ -111,31 +110,25 @@ def readKeyChain(filename):
     global privateKeysHex 
     global publicKeys
     global privateKeys 
-    print "Inside of readKey file %s" %filename
+    print "-------------------------Inside of readKeyChain file: %s------------------------" %filename
     if (filename):
         try:
             keyfile_fd = open(filename,"r")
-            print "opened file"
             for line in keyfile_fd:
                 words = line.split()
                 #print line
-                print line.split()
-                print "%i" %len(words)
                 # check if a comment
                 # more than 2 words, and the first word does not have a
                 # hash, we may have a valid host/key pair in the keychain
                 if ( (len(words) >= 4) and (words[0].find("#") == -1)):
                     host = words[1]
                     port = words[2]
-                    print ("readKey Host: %s Port %s" % (host,port))
                     keyInHex = words[3]
                     if (words[0] == "private"):
                         privateKeysHex[(host,port)] = keyInHex
-                        print ("Host: %s Port: %s KeyHex: %s" %(host, port, keyInHex))
                         privateKeys[(host,port)] = nacl.public.PrivateKey(keyInHex, nacl.encoding.HexEncoder)
                     elif (words[0] == "public"):
                         publicKeysHex[(host,port)] = keyInHex
-                        print ("Public Key Host %s Key %s" %(host,publicKeysHex[(host,port)]))
                         publicKeys[(host,port)] = nacl.public.PublicKey(keyInHex, nacl.encoding.HexEncoder)
         except Exception,e:
             print ( "error: opening keychain file: %s %s" % (filename,repr(e)))
@@ -148,9 +141,7 @@ class socket:
     
     def __init__(self):
         # your code goes here 
-        print ("Inside library init")
-        self.connections = []
-        self.backlog = []
+        print ("-------------------------Inside Library Init-----------------")
         self.connected = False
         self.last_acked = 0
         self.next_seq_num = 0
@@ -161,24 +152,24 @@ class socket:
         
     def bind(self,address):
         # bind is not used in this assignment
-        print "Binding()"
-        udpGlobalSocket.setsockopt(syssock.SOL_SOCKET, syssock.SO_REUSEADDR, 1)
-        udpGlobalSocket.bind(address)
+        print "-------------------Binding()----------------"
+        #udpGlobalSocket.setsockopt(syssock.SOL_SOCKET, syssock.SO_REUSEADDR, 1)
+        #udpGlobalSocket.bind(address)
         return 
 
     def connect(self,*args):
-
-        # example code to parse an argument list 
-        global sock352portTx
-        global sock352portRx
+        print "----------------Client is attempting to connect-------------------"
+        # example code to parse an argument list
         global ENCRYPT
         global publicKeysHex
         global privateKeysHex 
         global publicKeys
-        global privateKeys 
+        global privateKeys
+        global udpGlobalSocket 
+
         if (len(args) >= 1): 
             (host,port) = args[0]
-            print ("host: %s port %s" %(host,port))
+            print ("Host: %s 	Port %s" %(host,port))
 
         if (len(args) >= 2):
             if (args[1] == ENCRYPT):
@@ -189,24 +180,19 @@ class socket:
                 #self.publicKey= publicKeys[(host,port)]
          
         if (self.encrypt == True):
-            print "This connection is encrypted"
-            print "publicKeysHex Length: %i" %len(publicKeysHex)
+            print "This Connection is Encrypted"
             print ("Connection's public key is: %s" % publicKeysHex[(host,port)])
             print ("Private keys : %s" % privateKeysHex[('*', '*')])
-            #print ("Connection's private key is: %s" % (self.privateKeyHex)) 
-
-        # your code goes here 
 
         #Box for connecting/sending  boxForSend = Box(senderPrivate, recieverPrivate)
         self.box = Box(privateKeys[('*', '*')], publicKeys[(host,port)])
+        print ("Box created for Host: %s Port: %s" %(host,port))
         # This is a nonce, it *MUST* only be used once, but it is not considered
         #   secret and can be transmitted or stored alongside the ciphertext. A
         #   good source of nonces are just sequences of 24 random bytes.
-        nonce = nacl.utils.random(Box.NONCE_SIZE)
+        self.nonce = nacl.utils.random(Box.NONCE_SIZE)
         # encrypted = self.box.encrypt(message, nonce)
 
-
-        print "Connecting........"
         self.initial_seq_no = randint(0, (math.pow(2, 64) - 1))  # create a new sequence number
         print "Random Sequence Number Generate: %d" % self.initial_seq_no
         self.ack_number = 0
@@ -220,8 +206,8 @@ class socket:
         print "Packed Value   :", binascii.hexlify(packed_syn_packet)
         print "Sending SYN Packet....."
         if(self.encrypt):
-            packed_syn_packet = self.box.encrypt(packed_syn_packet, nonce)
-            length_encrypted_header = len(packed_syn_packet)
+            packed_syn_packet = self.box.encrypt(packed_syn_packet, self.nonce)
+            self.length_encrypted_header = len(packed_syn_packet)
             print "Length encrypted Header: ", len(packed_syn_packet)
 
         while True:
@@ -230,10 +216,9 @@ class socket:
             #print "Address: ", (host, port)
             try:
                 udpGlobalSocket.settimeout(sock352_timeout)
-                raw_packet, sender = udpGlobalSocket.recvfrom(len(packed_syn_packet))
-                #print "Packet Recieved... Packed Header is: ", binascii.hexlify(self.box.decrypt(raw_packet))
+                raw_packet, sender = udpGlobalSocket.recvfrom(self.length_encrypted_header)	
                 #print "Unpacked Header is: ", udpPkt_hdr_data.unpack(self.box.decrypt(raw_packet))
-                #break #test break
+                break #test break
             except syssock.timeout:
                 print "Socket Timed Out.... Resending Packet"
                 time.sleep(5)
@@ -244,18 +229,19 @@ class socket:
         if(self.encrypt):
             recieved_packet_header = packetHeader(self.box.decrypt(raw_packet))#SIGNALED THAT THIS LINE IS UNREACHABLE
         else:
-            recieved_packet_header = packetHeader(self.box.decrypt(raw_packet))
-        #decrypted_recieve_packet_header = self.box.decrypt(recieved_packet_header)
-        print "Flags...recieved_packet_header.flags:", recieved_packet_header.flags
-        print "Recieved ack_no: ", recieved_packet_header.ack_no
-        i
+            recieved_packet_header = packetHeader(raw_packet)
+        print "Packet Recieved... Packed Header is: ", recieved_packet_header
+        print "Flags for recieved_packet_header.flags:", recieved_packet_header.flags
+        print "Recieved ACK_NO: ", recieved_packet_header.ack_no
+
         # Check to make sure the recieved response is an SYN ACK
         if (recieved_packet_header.flags != 5 or
                     recieved_packet_header.ack_no != (syn_packet.header.sequence_no + 1)):
             print "Not proper SYN"
         else:
             self.connected= True
-            self.connections.append((host,port))
+            connections[sender] = sender
+            self.destination = sender
             self.next_seq_num = recieved_packet_header.ack_no
             self.last_acked = recieved_packet_header.ack_no - 1
             print "Connected Successfullly"
@@ -269,25 +255,29 @@ class socket:
         return
     
     def accept(self,*args):
-        # example code to parse an argument list 
+        global connections
+        print "------------Server is accepting connections------------"
+        # example code to parse an argument list
         global ENCRYPT
         if (len(args) >= 1):
             if (args[0] == ENCRYPT):
                 self.encrypt = True
+                print "This is Encrypted server"
         # your code goes here 
 
         if(self.encrypt):
             self.box = Box(privateKeys[('*', '*')], publicKeys[('localhost','5555')])
-        print "********************************************"
-        print "Inside Accept"
+            print "Server PrivateKey: %s PublicKey: %s" %(privateKeysHex[('*', '*')], publicKeysHex[('localhost', '5555')])
+            print "Encrypted Server Creating Box"
+
         while True:
             try:
                 # This means we got a packet.
                 udpGlobalSocket.settimeout(sock352_timeout)
                 raw_packet, sender = udpGlobalSocket.recvfrom(sock352PktSize)
                 if(self.encrypt):
+                    self.length_encrypted_header = len(raw_packet)
                     raw_packet = self.box.decrypt(raw_packet)
-                print sender
                 print "Packet Read During Accept"
                 print "Packet Recieved... Packed Header is: ", binascii.hexlify(raw_packet)
                 #print "Unpacked Header is: ", udpPkt_hdr_data.unpack(raw_packet)
@@ -302,12 +292,16 @@ class socket:
                 continue
             finally:
                 udpGlobalSocket.settimeout(None)
-
+   
         print "Accepted Connection"
         self.initial_seq_no = randint(0, (math.pow(2, 64) - 1))
         self.last_acked = recieved_packet_header.sequence_no + recieved_packet_header.payload_len - 1
         ack_packet = packet()
-        ack_packet.header.flags = (SOCK352_ACK + SOCK352_SYN)
+        if(connections.has_key(sender)):
+            print "Server already connected to this client"
+            ack_packet.header.flags = SOCK352_RESET
+        else:        
+		    ack_packet.header.flags = (SOCK352_ACK + SOCK352_SYN)
         print "Ack_Packet_Header: ", ack_packet.header.flags
         print "recieved seqnum: ", recieved_packet_header.sequence_no
         ack_packet.header.sequence_no = self.initial_seq_no
@@ -315,19 +309,21 @@ class socket:
         print "Ack_No", ack_packet.header.ack_no
         packed_ack_packet = ack_packet.packPacket()
         if(self.encrypt):
-            self.box.encrypt(packed_ack_packet)
-        
-        bytesSent = udpGlobalSocket.sendto(packed_ack_packet, sender)
-        print bytesSent
+			self.nonce = nacl.utils.random(Box.NONCE_SIZE)
+			packed_ack_packet = self.box.encrypt(packed_ack_packet, self.nonce)
 
-        client_sock = self
-        client_sock.connections.append(sender)
-        return (client_sock, sender)
+        bytesSent = udpGlobalSocket.sendto(packed_ack_packet, sender)
+        self.destination = sender
+        print bytesSent
+        print "Sender: ", sender
+        
+        return (self, sender)
     
     # Close the socket. All future operations on the socket object will fail. The remote end will receive no more data
     # and a FIN packet will be sent out signaling the connection is terminated
 
     def close(self):
+        global connections
         # your code goes here 
         # send a FIN packet (flags with FIN bit set)
         # remove the connection from the list of connections
@@ -335,10 +331,13 @@ class socket:
         FIN_packet = packet()
         FIN_packet.header.flags = SOCK352_FIN
         packed_FIN = FIN_packet.packPacket()
-        udpGlobalSocket.sendto(packed_FIN, self.connections[0])
-        self.connections = []
-        self.backlog = []
+        if(self.encrypt):
+             packed_FIN = self.box.encrypt(packed_FIN, self.nonce)
+        
+        udpGlobalSocket.sendto(packed_FIN, self.destination)
         self.connected = False
+        connections.pop(self.destination, None)
+        self.destination = {}
         self.last_acked = 0
         self.next_seq_num = 0
         self.next_ack_no = 0
@@ -363,13 +362,22 @@ class socket:
         print "Length of Data_Packet: ", len(packed_data_packet)
         # print "Packed Value   :", binascii.hexlify(packed_data_packet)
         print "Sending packet"
+        if(self.encrypt):
+            self.nonce = nacl.utils.random(Box.NONCE_SIZE)
+            packed_data_packet = self.box.encrypt(packed_data_packet, self.nonce)
+
         while True:
             # We resend the packet if we have a timeout
-            bytesSent = udpGlobalSocket.sendto(packed_data_packet, self.connections[0])
+            bytesSent = udpGlobalSocket.sendto(packed_data_packet, self.destination)
+            print "Bytes Sent: ", bytesSent
 
             try:
                 udpGlobalSocket.settimeout(sock352_timeout)
-                raw_packet_header, sender = udpGlobalSocket.recvfrom(header_len)
+                if(self.encrypt):
+                    raw_packet_header, sender = udpGlobalSocket.recvfrom(self.length_encrypted_header)
+                    raw_packet_header = self.box.decrypt(raw_packet_header)
+                else:
+                    raw_packet_header, sender = udpGlobalSocket.recvfrom(header_len)
                 recieved_packet_header = packetHeader(raw_packet_header)
                 print "SeqNum Sent: ", data_packet.header.sequence_no
                 print "Ack Recieved: ", recieved_packet_header.ack_no
@@ -391,22 +399,28 @@ class socket:
         self.next_ack_no = recieved_packet_header.ack_no + 1
 
         print "Returning ", bytesSent
-        return bytesSent - header_len
-
-        return 
+        if(self.encrypt):
+             headerLen = self.length_encrypted_header
+        else:
+             headerLen = header_len
+        
+        return bytesSent - headerLen
 
     def recv(self,nbytes):
         # your code goes here
         print "In Recieve"
-        print "bytes to recieve: ", bytes_to_receive
+        #print "bytes to recieve: ", bytes_to_receive
         while True:
             try:
                 # This means we got a packet.
                 udpGlobalSocket.settimeout(sock352_timeout)
                 raw_packet, sender = udpGlobalSocket.recvfrom(5000)
-                recieved_packet_header = packetHeader(raw_packet[:40])
-                print "Packet Recieved... Packed Header is: ", binascii.hexlify(raw_packet[:40])
-                print "Unpacked Header is: ", udpPkt_hdr_data.unpack(raw_packet[:40])
+                if(self.encrypt):
+                    raw_packet = self.box.decrypt(raw_packet)
+                
+                recieved_packet_header = packetHeader(raw_packet[:header_len])
+                print "Packet Recieved... Packed Header is: ", binascii.hexlify(raw_packet[:header_len])
+                print "Unpacked Header is: ", udpPkt_hdr_data.unpack(raw_packet[:header_len])
                 if (recieved_packet_header.flags > 0):
                     print "Not data packet"
                     if (recieved_packet_header.flags == SOCK352_FIN):
@@ -428,7 +442,9 @@ class socket:
 
         # print "Payload length :", recieved_packet_header.payload_len
 
-        payload = raw_packet[40: (40+bytes_to_receive)]
+
+        payload = raw_packet[(40): (40+nbytes)]
+       
         print "payload length: ", len(payload)
         # as a 4 byte integer in network byte order (big endian)
 
@@ -438,7 +454,9 @@ class socket:
         ack_packet.create_ack(recieved_packet_header)
         print "Ack Packet Ack_NO: ", ack_packet.header.ack_no
         packed_ack_packet = ack_packet.packPacket()
-        udpGlobalSocket.sendto(packed_ack_packet, sender)
+        if(self.encrypt):
+            packed_ack_packet = self.box.encrypt(packed_ack_packet, self.nonce)
+            udpGlobalSocket.sendto(packed_ack_packet, sender)
 
         return payload
 
@@ -504,6 +522,7 @@ class packet:
             self.header.payload_len = len(self.payload)
         pass
     #Packs the packetheader and payload as one object
+    
     def packPacket(self):
         packed_header = self.header.packPacketHeader()
 
@@ -517,11 +536,9 @@ class packet:
     #Creates an acknowledgement packet to signal the packet was received
     def create_ack(self, recievedHeader):
         self.header.ack_no = recievedHeader.sequence_no + recievedHeader.payload_len
-        self.header.sequence_no = recievedHeader.ack_no + 1;
+        self.header.sequence_no = recievedHeader.ack_no + 1
         self.header.flags = SOCK352_ACK;
     #Creates a SYN packet to signal a connection needs to be made
     def create_syn(self, seq_num):
         self.header.flags = SOCK352_SYN
         self.header.sequence_no = seq_num    
-
-

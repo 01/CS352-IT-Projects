@@ -1,0 +1,5 @@
+Commands for easy copy
+
+python server2.py -f test2.png -u 8888 -v 9999 -k test3
+
+python client2.py -d localhost -f test1.png -u 9999 -v 8888 -k test3
