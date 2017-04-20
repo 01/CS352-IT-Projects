@@ -11,6 +11,7 @@ import socket as syssock
 import struct
 import sys
 
+
 # encryption libraries 
 import nacl.utils
 import nacl.secret
